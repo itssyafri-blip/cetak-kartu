@@ -1,13 +1,15 @@
+
 import React, { useState, useRef } from 'react';
 import type { CardData } from './types';
 import StudentIdCard from './components/StudentIdCard';
 import TextInput from './components/TextInput';
 import ImageUploader from './components/ImageUploader';
-import { DownloadIcon } from './components/icons';
+import { DownloadIcon, WordIcon } from './components/icons';
 
-// Declare jsPDF and html2canvas from global scope
+// Declare jsPDF, html2canvas, and docx from global scope
 declare const jspdf: any;
 declare const html2canvas: any;
+declare const docx: any;
 
 function App() {
   const [cardData, setCardData] = useState<CardData>({
@@ -27,6 +29,7 @@ function App() {
 
   const cardRef = useRef<HTMLDivElement>(null);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [isDownloadingWord, setIsDownloadingWord] = useState(false);
 
   const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -78,6 +81,65 @@ function App() {
     }
 };
 
+  const handleDownloadWord = async () => {
+    if (!cardRef.current) return;
+    setIsDownloadingWord(true);
+
+    try {
+        const canvas = await html2canvas(cardRef.current, {
+            scale: 3,
+            useCORS: true,
+            backgroundColor: null,
+        });
+
+        const imgData = canvas.toDataURL('image/png');
+        // Extract base64 part
+        const base64Data = imgData.split(',')[1];
+
+        const { Document, Packer, Paragraph, ImageRun } = docx;
+
+        // Create a new document
+        // Card dimensions: ~512px width in design.
+        const doc = new Document({
+            sections: [{
+                properties: {},
+                children: [
+                    new Paragraph({
+                        children: [
+                            new ImageRun({
+                                data: base64Data,
+                                transformation: {
+                                    width: 512,
+                                    height: 323,
+                                },
+                            }),
+                        ],
+                    }),
+                ],
+            }],
+        });
+
+        // Generate blob and download
+        const blob = await Packer.toBlob(doc);
+        const fileName = cardData.studentName ? `kartu-pelajar-${cardData.studentName.replace(/\s/g, '_')}.docx` : 'kartu-pelajar.docx';
+        
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+    } catch (error) {
+        console.error("Error generating Word:", error);
+        alert("Gagal membuat Word. Pastikan koneksi internet lancar untuk memuat library.");
+    } finally {
+        setIsDownloadingWord(false);
+    }
+  };
+
 
   return (
     <div className="min-h-screen bg-gray-100 font-sans">
@@ -120,14 +182,15 @@ function App() {
               <StudentIdCard data={cardData} cardRef={cardRef} />
             </div>
              <div className="mt-8 w-full max-w-xs flex flex-col gap-4">
+                {/* PDF Button */}
                 <button
                     onClick={handleDownloadPdf}
-                    disabled={isDownloadingPdf}
-                    className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-300 disabled:cursor-not-allowed transition-colors"
+                    disabled={isDownloadingPdf || isDownloadingWord}
+                    className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-300 disabled:cursor-not-allowed transition-colors w-full"
                 >
                     {isDownloadingPdf ? (
                         <>
-                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 D/www.w3.org/2000/svg">
+                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
@@ -137,6 +200,28 @@ function App() {
                         <>
                             <DownloadIcon />
                             Unduh Kartu (PDF)
+                        </>
+                    )}
+                </button>
+
+                {/* Word Button */}
+                <button
+                    onClick={handleDownloadWord}
+                    disabled={isDownloadingPdf || isDownloadingWord}
+                    className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-300 disabled:cursor-not-allowed transition-colors w-full"
+                >
+                    {isDownloadingWord ? (
+                        <>
+                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Memproses Word...
+                        </>
+                    ) : (
+                        <>
+                            <WordIcon />
+                            Unduh Kartu (Word)
                         </>
                     )}
                 </button>
